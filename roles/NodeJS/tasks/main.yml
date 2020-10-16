@@ -1,0 +1,117 @@
+- name: Install Packages
+  apt:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - nginx
+    - ufw
+    - nodejs
+    - git
+    - curl
+    - python-certbot-nginx
+
+- name: Open web traffic
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+  with_items:
+    - 80
+    - 443
+  notify: Restart UFW
+
+- name: Clone from Github
+  git:
+    repo: https://{{ github_token }}:x-oauth-basic@{{ repo_url }}
+    clone: yes
+    dest: /var/www/{{ item.branch }}
+    accept_hostkey: yes
+    version: "{{ item.branch }}"
+    force: yes
+  with_items:
+    - "{{ prod }}"
+    - "{{ dev }}"
+
+- name: Install NPM
+  shell: curl https://www.npmjs.com/install.sh | sudo sh
+
+- name: Npm init
+  shell:
+    cmd: npm init -f
+    chdir: /var/www/{{ item.branch }}
+  with_items:
+    - "{{ prod }}"
+    - "{{ dev }}"
+
+- name: Install PM2
+  npm:
+    name: pm2
+    global: yes
+
+- name: Install node packages on dev
+  npm:
+    name: "{{ item }}"
+    path: /var/www/dev/
+  with_items:
+    - express
+    - body-parser
+
+- name: Install node packages on master
+  npm:
+    name: "{{ item }}"
+    path: /var/www/master/
+  with_items:
+    - express
+    - body-parser
+
+- name: Ansible create file if it doesn't exist example
+  file:
+    path: /etc/nginx/sites-available/{{ item.hostname }}.conf
+    state: touch
+  with_items:
+    - "{{ prod }}"
+    - "{{ dev }}"
+
+- name: Configure virtual hosts
+  blockinfile:
+    path: /etc/nginx/sites-available/{{ item.hostname }}.conf
+    block:  |
+      server{
+        listen 80;
+          listen [::]:80;
+        server_name {{ item.hostname }};
+            location / {
+            proxy_pass http://127.0.0.1:{{ item.port }};
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_cache_bypass $http_upgrade;
+        }
+      }
+  with_items:
+    - "{{ prod }}"
+    - "{{ dev }}"
+  notify: Restart Nginx
+
+- name: Setup enabled sites for Nginx
+  shell:
+    cmd: ln -s /etc/nginx/sites-available/{{ item.hostname }}.conf /etc/nginx/sites-enabled/
+  with_items:
+    - "{{ prod }}"
+    - "{{ dev }}"
+  ignore_errors: yes
+  notify: Restart Nginx
+
+- name: Letsencrypt
+  shell: certbot run -n --nginx --agree-tos -d {{ domains }}  -m  {{ certbot_email }}  --redirect
+  notify: Restart Nginx
+
+- name: Copy ecosystem file onto the machine
+  copy:
+    src: app.json
+    dest: /var/www/
+
+- name: Launch apps
+  shell:
+    cmd: pm2 start app.json
+    chdir: /var/www/

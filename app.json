@@ -1,0 +1,22 @@
+{
+    "apps" : [
+    {
+      name: 'dev',
+      script: './dev/index.js',
+      watch: true,
+      env: {
+        NODE_ENV: 'DEV',
+        PORT : 3000
+      } 
+    },
+    {
+        name: 'master',
+        script: './master/index.js',
+        watch: true,
+        env: {
+            NODE_ENV: 'MASTER',
+            PORT: 1337
+        }
+    }
+    ]
+  }

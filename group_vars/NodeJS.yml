@@ -1,0 +1,13 @@
+ansible_user: root
+prod:
+  hostname:
+  port:
+  branch:
+dev:
+  hostname:
+  port:
+  branch:
+domains:
+certbot_email:
+github_token:
+repo_url:
